@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"mime"
@@ -38,12 +40,12 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 
 	const maxUploadSize = 10 << 20 // 10MB
 	r.ParseMultipartForm(maxUploadSize)
-	file, fileHeader, err := r.FormFile("thumbnail")
+	thumbnailFile, fileHeader, err := r.FormFile("thumbnail")
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Couldn't parse thumbnail form", err)
 		return
 	}
-	defer file.Close()
+	defer thumbnailFile.Close()
 
 	// save image to local filesystem
 	// path is "/assets/<videoID>.<mediaType>"
@@ -58,26 +60,36 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// get the extension from the media type
+	// get the extension from the media type, then create the thumbnail file on disk
 	mediaType = mediaType[strings.LastIndex(mediaType, "/")+1:]
-	thumbnailPath := filepath.Join(cfg.assetsRoot, videoIDString+"."+mediaType)
+	randBytes := make([]byte, 32)
+	_, err = rand.Read(randBytes)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create random bytes", err)
+		return
+	}
+	thumbnailPath := base64.RawURLEncoding.EncodeToString(randBytes) + "." + mediaType
+	thumbnailPath = filepath.Join(cfg.assetsRoot, thumbnailPath)
 	dest, err := os.Create(thumbnailPath)
 	fmt.Println("thumbnail path", thumbnailPath)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't create thumbnail file", err)
+		fmt.Fprintln(os.Stderr, "Couldn't create thumbnail file")
+		respondWithError(w, http.StatusInternalServerError, "Internal server error", err)
 		return
 	}
 	defer dest.Close()
-	_, err = io.Copy(dest, file)
+	_, err = io.Copy(dest, thumbnailFile)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't copy thumbnail file", err)
+		fmt.Fprintln(os.Stderr, "Couldn't copy thumbnail file")
+		respondWithError(w, http.StatusInternalServerError, "Internal server error", err)
 		return
 	}
 
 	// get video metadata from database
 	metadata, err := cfg.db.GetVideo(videoID)
 	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "Couldn't get video", err)
+		fmt.Fprintln(os.Stderr, "Couldn't get video from database")
+		respondWithError(w, http.StatusBadRequest, "Internal server error", err)
 		return
 	}
 	if metadata.UserID != userID {
@@ -92,7 +104,8 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	metadata.UpdatedAt = time.Now()
 	metadata.ThumbnailURL = &thumbnailPath
 	if err = cfg.db.UpdateVideo(metadata); err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Couldn't update video", err)
+		fmt.Fprintln(os.Stderr, "Couldn't update video to database")
+		respondWithError(w, http.StatusInternalServerError, "Internal server error", err)
 		return
 	}
 
