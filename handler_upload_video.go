@@ -1,14 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"mime"
 	"net/http"
 	"os"
+	"os/exec"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -89,6 +93,13 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	}
 	tempFile.Seek(0, io.SeekStart) // read the file again from the beginning, as we already moved the offset to the end of the file by copying it above
 
+	fmt.Println(tempFile.Name())
+	aspectRatio, err := getVideoAspectRatio(tempFile.Name())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to get video's aspect ratio: %s", err)
+		return
+	}
+
 	// put the object into S3
 	randBytes := make([]byte, 32)
 	_, err = rand.Read(randBytes)
@@ -99,8 +110,14 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	}
 	s3FileKey := base64.RawURLEncoding.EncodeToString(randBytes)
 	s3FileKey = s3FileKey + ".mp4"
+	if aspectRatio == "16:9" {
+		s3FileKey = "landscape/" + s3FileKey
+	} else if aspectRatio == "9:16" {
+		s3FileKey = "portrait/" + s3FileKey
+	} else {
+		s3FileKey = "other/" + s3FileKey
+	}
 	fmt.Println(s3FileKey)
-	fmt.Println(cfg.s3Bucket)
 
 	s3PutObjectInput := &s3.PutObjectInput{
 		Bucket:      aws.String(cfg.s3Bucket),
@@ -126,4 +143,50 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	}
 
 	respondWithJSON(w, http.StatusOK, videoMetadata)
+}
+
+func gcd(a int, b int) int {
+	if b == 0 {
+		return a
+	}
+	return gcd(b, a%b)
+}
+
+func getVideoAspectRatio(filePath string) (string, error) {
+	command := exec.Command("ffprobe", "-v", "error", "-print_format", "json", "-select_streams", "v:0", "-show_entries", "stream=width,height", filePath)
+	commandStdout := &bytes.Buffer{}
+	command.Stdout = commandStdout
+	err := command.Run()
+	if err != nil {
+		return "", err
+	}
+	result := struct {
+		Program []struct {
+		} `json:"program"`
+		Streams []struct {
+			Width  int `json:"width"`
+			Height int `json:"height"`
+		} `json:"streams"`
+	}{}
+	json.Unmarshal(commandStdout.Bytes(), &result)
+	if len(result.Streams) == 0 {
+		return "", fmt.Errorf("No video stream found")
+	}
+
+	var width int = result.Streams[0].Width
+	var height int = result.Streams[0].Height
+	var _gcd int = gcd(width, height)
+	var fwidth float64 = float64(width)
+	var fheight float64 = float64(height)
+	var fgcd float64 = float64(_gcd)
+	var aspectRatio string
+	if math.Abs((fwidth/fgcd)/(fheight/fgcd))-float64(9.0/16.0) <= 0.01 {
+		aspectRatio = "9:16"
+	} else if math.Abs((fheight/fgcd)/(fwidth/fgcd))-float64(16.0/9.0) <= 0.01 {
+		aspectRatio = "16:9"
+	} else {
+		aspectRatio = "other"
+	}
+
+	return aspectRatio, nil
 }
