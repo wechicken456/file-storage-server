@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -97,11 +99,31 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	}
 	s3FileKey := base64.RawURLEncoding.EncodeToString(randBytes)
 	s3FileKey = s3FileKey + ".mp4"
+	fmt.Println(s3FileKey)
+	fmt.Println(cfg.s3Bucket)
 
 	s3PutObjectInput := &s3.PutObjectInput{
-		Bucket: &cfg.s3Bucket,
-		Key:    &s3FileKey,
-		Body:   tempFile,
+		Bucket:      aws.String(cfg.s3Bucket),
+		Key:         aws.String(s3FileKey),
+		Body:        tempFile,
+		ContentType: aws.String("video/mp4"),
 	}
-	cfg.s3Client.PutObject(r.Context(), s3PutObjectInput)
+	_, err = cfg.s3Client.PutObject(context.TODO(), s3PutObjectInput)
+
+	if err != nil {
+		fmt.Println("Couldn't put object into S3")
+		respondWithError(w, http.StatusInternalServerError, "Internal server error", err)
+		return
+	}
+
+	// update video url in database
+	var _url string = fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, s3FileKey)
+	videoMetadata.VideoURL = &_url
+	if err = cfg.db.UpdateVideo(videoMetadata); err != nil {
+		fmt.Println("Couldn't update video in database")
+		respondWithError(w, http.StatusInternalServerError, "Internal server error", err)
+		return
+	}
+
+	respondWithJSON(w, http.StatusOK, videoMetadata)
 }

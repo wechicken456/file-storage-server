@@ -100,7 +100,7 @@ func main() {
 	}
 
 	// S3 client
-	s3Config, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion("s3Region"))
+	s3Config, err := config.LoadDefaultConfig(context.TODO())
 	if err != nil {
 		log.Fatal("failed loading config")
 	}
