@@ -34,3 +34,23 @@ So I can't create a bucket called `bootdev` because someone else already created
 ```bash
 aws s3 cp ./samples/boots-image-horizontal.png s3://tubely-283427619/
 ```
+
+## MP4 video fetch
+
+The developer network tab shows that there are multiple `GET` requests to get the MP4 video.
+
+
+1. 1st request: The `Range` header in the request is `bytes=0-`. This says "give me all the bytes". The response's `Content-Range` header tells the MP4 size, but the size of the response doesn't have that many bytes?? Strange...
+
+2. 2nd request: The `Range` header in the request is `bytes=XXXXXX-`. This says "give me all the bytes from `XXXXXX` to the end". But `XXXXXX` is NOT contiguous with the # of bytes transferred in the 1st request. In other words, the browser is ONLY downloading the *end* of the MP4 file now. Interesting 
+
+3. 3rd request: it's just getting a bit more from the start of the file.
+
+
+So what's the deal? Well, "traditional" MP4 file, the `moov` (metadata) is at the **end** of the file. So the browswer needs to know how many bytes the video is (from the first request) in order to send a second request with `Range` equals to a reasonable offset from the end of the file to get its metadata. More [here](https://surma.dev/things/range-requests/#blobdef)
+
+But video files CAN have its metadata at the front as well.
+
+
+
+
