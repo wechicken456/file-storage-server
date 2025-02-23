@@ -71,7 +71,7 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	thumbnailPath := base64.RawURLEncoding.EncodeToString(randBytes) + "." + mediaType
 	thumbnailPath = filepath.Join(cfg.assetsRoot, thumbnailPath)
 	dest, err := os.Create(thumbnailPath)
-	fmt.Println("thumbnail path", thumbnailPath)
+	fmt.Println("thumbnail path: ", thumbnailPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Couldn't create thumbnail file")
 		respondWithError(w, http.StatusInternalServerError, "Internal server error", err)
@@ -97,8 +97,15 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// remove the old file as we just created a new thumbnail file
+	tmp := *metadata.ThumbnailURL
+	err = os.Remove(tmp)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to remove old thumbnail file: %s", err)
+		// this error doesn't really affect our operation so we don't have to return
+	}
+
 	// store thumbnail in database
-	thumbnailPath = filepath.Join(string(filepath.Separator), thumbnailPath) // add a leading slash to the path
 	metadata.ID = videoID
 	metadata.CreatedAt = time.Now()
 	metadata.UpdatedAt = time.Now()

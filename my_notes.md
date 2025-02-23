@@ -20,6 +20,31 @@ It just makes it easier to think about them as directories :)
 
 ***Metadata*** is stored *separately from* the object, and you can have ***variable*** amount of metadata. This means that the data is **unstructured**.
 
+## Create pollicies to allow S3 object manipulation
+Example:
+
+```
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "Statement1",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:DeleteObject",
+                "s3:ListBucket"
+            ],
+            "Resource": [
+                "arn:aws:s3:::tubely-283427619",
+                "arn:aws:s3:::tubely-283427619/*"
+            ]
+        }
+    ]
+}
+```
+
 
 ## Unique bucket names
 
@@ -50,6 +75,12 @@ The developer network tab shows that there are multiple `GET` requests to get th
 So what's the deal? Well, "traditional" MP4 file, the `moov` (metadata) is at the **end** of the file. So the browswer needs to know how many bytes the video is (from the first request) in order to send a second request with `Range` equals to a reasonable offset from the end of the file to get its metadata. More [here](https://surma.dev/things/range-requests/#blobdef)
 
 But video files CAN have its metadata at the front as well.
+
+We can use `ffmpeg` to edit the video to put the metadata to the beginning
+
+=> Only 1 request needed to start playing the video. However, as we play/skip the video, more requests will be sent.
+
+
 
 
 

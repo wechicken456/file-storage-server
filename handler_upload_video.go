@@ -20,6 +20,16 @@ import (
 	"github.com/google/uuid"
 )
 
+func processVideoForFastStart(filePath string) (string, error) {
+	var processedVideoPath string = filePath + ".processed"
+	var processCommand *exec.Cmd = exec.Command("ffmpeg", "-i", filePath, "-c", "copy", "-movflags", "faststart", "-f", "mp4", processedVideoPath)
+	err := processCommand.Run()
+	if err != nil {
+		return "", err
+	}
+	return processedVideoPath, nil
+}
+
 func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request) {
 	const maxUploadSize = 1 << 30 // 1GB
 	// parse video ID
@@ -97,7 +107,28 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	aspectRatio, err := getVideoAspectRatio(tempFile.Name())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "failed to get video's aspect ratio: %s", err)
+		respondWithError(w, http.StatusInternalServerError, "Internal server error", err)
 		return
+	}
+
+	// process the video with ffmpeg for FastStart
+	processedVideoPath, err := processVideoForFastStart(tempFile.Name())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to process video for FastStart: %s", err)
+		respondWithError(w, http.StatusInternalServerError, "Internal server error", err)
+		return
+	}
+	processedVideo, err := os.Open(processedVideoPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to open processed video: %s", err)
+		respondWithError(w, http.StatusInternalServerError, "Internal server error", err)
+		return
+	}
+	// then delete the original video
+	err = os.Remove(tempFile.Name())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to delete original video: %s", err)
+		// this error doesn't really affect our user experience, so don't return
 	}
 
 	// put the object into S3
@@ -122,7 +153,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	s3PutObjectInput := &s3.PutObjectInput{
 		Bucket:      aws.String(cfg.s3Bucket),
 		Key:         aws.String(s3FileKey),
-		Body:        tempFile,
+		Body:        processedVideo,
 		ContentType: aws.String("video/mp4"),
 	}
 	_, err = cfg.s3Client.PutObject(context.TODO(), s3PutObjectInput)
