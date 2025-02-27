@@ -50,6 +50,17 @@ It just makes it easier to think about them as directories :)
 
 A **region** has multiple **zones**, a zone has multiple **data centers**, and your **S3 bucket** is *replicated* across *multiple* **zones** in a *single* **region**.
 
+![S3 regions](./assets/s3_regions.png)
+
+# AWS CloudFront and CDNs
+A Content Delivery Network (CDN) is a network of servers that serves content based on the requesting geographic location.
+
+=> Lower latency for users far away from the **origin server**.
+
+S3 bucket lives on the **origin** server (e.g. us-east-2), and **edge** servers are CloudFront servers (e.g. australia). When the origin server updates, the edge servers update their caches.
+
+![CDNs](./assets/CDNs.png)
+
 ## Create pollicies to allow S3 object manipulation
 Example:
 
