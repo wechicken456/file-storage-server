@@ -20,7 +20,9 @@ func New(options ...func(*Server)) *Server {
 Essentially, it allows us to define a fixed type signature for ANY possible configuration of a structure by creating functions that set the values for our structure.
 
 # Presigned URLs
-Creates URLs with an expiration time to access resources. 
+Creates URLs with an expiration time to access resources. Still serve content from the S3 bucket
+
+Good for *truly* prviate content. A CDN like AWS CloudFront offers better and performance security than serving files directly from S3 buckets.
 
 Does NOT require user to be logged in - it's just an URL that expires.
 
@@ -31,6 +33,7 @@ The most important thing about presigned URLs is that they **authenticate** you,
 Authenticate: Your ID is authentic, you are who you say you are
 
 Authorize: You are authorized to perform this task (or access this resource, etc) 
+
 
 # Serverless architecture
 
@@ -60,6 +63,7 @@ A Content Delivery Network (CDN) is a network of servers that serves content bas
 S3 bucket lives on the **origin** server (e.g. us-east-2), and **edge** servers are CloudFront servers (e.g. australia). When the origin server updates, the edge servers update their caches.
 
 ![CDNs](./assets/CDNs.png)
+
 
 ## Create pollicies to allow S3 object manipulation
 Example:
