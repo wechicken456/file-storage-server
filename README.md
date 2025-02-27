@@ -1,6 +1,9 @@
 # learn-file-storage-s3-golang-starter (Tubely)
-File storage application in Golang to learn AWS S3 buckets, AWS policies, range requests for videos, JWT, ffmpeg, and sqlite3.
+File storage application in Golang to learn AWS S3 buckets, policies, groups, roles.
 
+Also learned range requests for videos, JWT authentication, ffmpeg, and sqlite3.
+
+List of the things I learned and some notes taken during development of this project is in [my_notes.md](./my_notes.md).
 
 ## 1. Install dependencies
 

@@ -4,6 +4,34 @@
 curl -X POST --header "Content-Type: application/json" --data '{"email": "admin@tubely.com", "password": "password"}' http://localhost:8091/api/login
 ```
 
+# Go Functional Options Pattern
+
+Read [this](https://golang.cafe/blog/golang-functional-options-pattern.html)
+
+```Go
+func New(options ...func(*Server)) *Server {
+  svr := &Server{}
+  for _, set_config_func := range options {
+    set_config_func(svr)
+  }
+  return svr
+}
+```
+Essentially, it allows us to define a fixed type signature for ANY possible configuration of a structure by creating functions that set the values for our structure.
+
+# Presigned URLs
+Creates URLs with an expiration time to access resources. 
+
+Does NOT require user to be logged in - it's just an URL that expires.
+
+=> Temporary access to private S3 objects .
+
+The most important thing about presigned URLs is that they **authenticate** you, but they do not **authorize** you. The distinction between these two concepts is important but it's pretty easy to gloss over it when dealing with most situations in AWS. 
+
+Authenticate: Your ID is authentic, you are who you say you are
+
+Authorize: You are authorized to perform this task (or access this resource, etc) 
+
 # Serverless architecture
 
 Doesn't mean there isn't a server. It means the server is managed by someone else.
@@ -19,6 +47,8 @@ The illusion of directories in the file names are just prefixes to the keys. Pre
 It just makes it easier to think about them as directories :) 
 
 ***Metadata*** is stored *separately from* the object, and you can have ***variable*** amount of metadata. This means that the data is **unstructured**.
+
+A **region** has multiple **zones**, a zone has multiple **data centers**, and your **S3 bucket** is *replicated* across *multiple* **zones** in a *single* **region**.
 
 ## Create pollicies to allow S3 object manipulation
 Example:

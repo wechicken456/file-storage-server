@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -13,12 +14,17 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
+	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
 	"github.com/google/uuid"
 )
+
+var DEBUG bool = true
 
 func processVideoForFastStart(filePath string) (string, error) {
 	var processedVideoPath string = filePath + ".processed"
@@ -28,6 +34,40 @@ func processVideoForFastStart(filePath string) (string, error) {
 		return "", err
 	}
 	return processedVideoPath, nil
+}
+
+// Return a presigned URL (by attaching a cryptographic signature) that allows access to the object for a limited time.
+// To be clear, it doesn't require the user to be logged in - it's just a URL that expires.
+func generatePresignedURL(s3Client *s3.Client, bucket string, key string, expireTime time.Duration) (string, error) {
+	var presignClient *s3.PresignClient = s3.NewPresignClient(s3Client)
+	var params s3.GetObjectInput = s3.GetObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+	}
+
+	presignHTTPRequest, err := presignClient.PresignGetObject(context.Background(), &params, s3.WithPresignExpires(expireTime))
+	if err != nil {
+		return "", err
+	}
+	return presignHTTPRequest.URL, nil
+}
+
+func (cfg *apiConfig) dbVideoToSignedVideo(video database.Video) (database.Video, error) {
+	if video.VideoURL == nil {
+		return database.Video{}, errors.New("video.VideoURL does NOT exist")
+	}
+	stringSlice := strings.Split(*video.VideoURL, ",")
+	if len(stringSlice) != 2 {
+		return video, errors.New("video.VideoURL does NOT follow format \"bucket,s3FileKey\"")
+	}
+	videoBucket := stringSlice[0]
+	videoKey := stringSlice[1]
+	presignedURL, err := generatePresignedURL(cfg.s3Client, videoBucket, videoKey, time.Duration(10*time.Minute))
+	if err != nil {
+		return video, err
+	}
+	video.VideoURL = &presignedURL
+	return video, nil
 }
 
 func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request) {
@@ -164,16 +204,24 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// update video url in database
-	var _url string = fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, s3FileKey)
+	// update video url in database, get the presigned URL and return it to the client
+	var _url string = cfg.s3Bucket + "," + s3FileKey
 	videoMetadata.VideoURL = &_url
+	presignedVideo, err := cfg.dbVideoToSignedVideo(videoMetadata)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting presigned URL for video: %s", err)
+		return
+	}
+	if DEBUG {
+		fmt.Printf("Presigned URL from UPLOAD func: %s\n", *presignedVideo.VideoURL)
+	}
 	if err = cfg.db.UpdateVideo(videoMetadata); err != nil {
 		fmt.Println("Couldn't update video in database")
 		respondWithError(w, http.StatusInternalServerError, "Internal server error", err)
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, videoMetadata)
+	respondWithJSON(w, http.StatusOK, presignedVideo)
 }
 
 func gcd(a int, b int) int {

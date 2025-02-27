@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
@@ -95,7 +97,19 @@ func (cfg *apiConfig) handlerVideoGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondWithJSON(w, http.StatusOK, video)
+	// if a video exists, then it will have an URL. We need an URL to presign
+	if video.VideoURL == nil {
+		respondWithJSON(w, http.StatusOK, video)
+		return
+	}
+
+	// get the presigned URL for the video
+	presignedVideo, err := cfg.dbVideoToSignedVideo(video)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "handlerVideoGet: Error getting presigned URL for video: %s", err)
+		return
+	}
+	respondWithJSON(w, http.StatusOK, presignedVideo)
 }
 
 func (cfg *apiConfig) handlerVideosRetrieve(w http.ResponseWriter, r *http.Request) {
@@ -114,6 +128,19 @@ func (cfg *apiConfig) handlerVideosRetrieve(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't retrieve videos", err)
 		return
+	}
+
+	// get the presigned URL for each video
+	for i, video := range videos {
+		// if a video exists, then it will have an URL. We need an URL to presign
+		if video.VideoURL == nil {
+			continue
+		}
+		videos[i], err = cfg.dbVideoToSignedVideo(video)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "handlerVideosRetrieve: Error getting presigned URL for video: %d, %s", i, err)
+			return
+		}
 	}
 
 	respondWithJSON(w, http.StatusOK, videos)
